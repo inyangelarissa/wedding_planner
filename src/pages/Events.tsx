@@ -1,12 +1,11 @@
-import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, DollarSign, Users, MapPin, Plus, ArrowLeft } from "lucide-react";
+import { Calendar, DollarSign, Users, MapPin, Plus, ArrowLeft, Heart } from "lucide-react";
 import { format } from "date-fns";
-import { toast } from "sonner";
 
 interface Event {
   id: string;
@@ -20,36 +19,29 @@ interface Event {
 
 const Events = () => {
   const navigate = useNavigate();
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const fetchEvents = useCallback(async () => {
-    try {
+  const { data: user, isLoading: isUserLoading } = useQuery({
+    queryKey: ["user"],
+    queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate("/auth");
-        return;
-      }
+      return user;
+    },
+  });
 
+  const { data: events, isLoading: isEventsLoading } = useQuery({
+    queryKey: ["events", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("events")
         .select("*")
-        .eq("couple_id", user.id)
+        .eq("couple_id", user?.id)
         .order("event_date", { ascending: true });
 
       if (error) throw error;
-      setEvents(data || []);
-    } catch (error) {
-      console.error("Error fetching events:", error);
-      toast.error("Failed to load events");
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate]);
-
-  useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
+      return data as Event[];
+    },
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -60,6 +52,17 @@ const Events = () => {
       default: return "bg-gray-500/10 text-gray-500 border-gray-500/20";
     }
   };
+
+  if (isUserLoading || isEventsLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <Heart className="w-12 h-12 text-primary fill-primary animate-pulse mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading your events...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-muted to-background">
@@ -86,16 +89,7 @@ const Events = () => {
           </Button>
         </div>
 
-        {loading ? (
-          <div className="grid md:grid-cols-2 gap-6">
-            {[1, 2].map((i) => (
-              <Card key={i} className="animate-pulse">
-                <CardHeader className="h-32 bg-muted" />
-                <CardContent className="h-24 bg-muted/50 mt-4" />
-              </Card>
-            ))}
-          </div>
-        ) : events.length === 0 ? (
+        {!events || events.length === 0 ? (
           <Card className="text-center py-12">
             <CardContent>
               <Calendar className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />

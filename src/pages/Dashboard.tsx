@@ -1,7 +1,6 @@
-import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/client";
-import { User } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -9,41 +8,27 @@ import { Calendar, Users, MapPin, TrendingUp, LogOut, Heart } from "lucide-react
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  const checkUser = useCallback(async () => {
-    try {
+  const { data: user, isLoading: isUserLoading } = useQuery({
+    queryKey: ["user"],
+    queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        navigate("/auth");
-        return;
-      }
+      return user;
+    },
+  });
 
-      setUser(user);
-
-      // Get user role
-      const { data: roleData } = await supabase
+  const { data: userRole, isLoading: isRoleLoading } = useQuery({
+    queryKey: ["userRole", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
         .from("user_roles")
         .select("role")
-        .eq("user_id", user.id)
+        .eq("user_id", user?.id)
         .single();
-
-      if (roleData) {
-        setUserRole(roleData.role);
-      }
-    } catch (error) {
-      console.error("Error checking user:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate]);
-
-  useEffect(() => {
-    checkUser();
-  }, [checkUser]);
+      return data?.role;
+    },
+  });
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -51,7 +36,7 @@ const Dashboard = () => {
     navigate("/");
   };
 
-  if (loading) {
+  if (isUserLoading || isRoleLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -62,7 +47,7 @@ const Dashboard = () => {
     );
   }
 
-  const getRoleName = (role: string | null) => {
+  const getRoleName = (role: string | undefined) => {
     if (!role) return "User";
     return role.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
   };

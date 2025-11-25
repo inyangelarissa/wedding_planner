@@ -47,15 +47,33 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: loginPassword,
       });
 
       if (error) throw error;
- 
+
       toast.success("Welcome back!");
-      navigate("/dashboard");
+
+      // Check user role and redirect accordingly
+      if (data.user) {
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", data.user.id)
+          .single();
+
+        if (roleData?.role === "vendor") {
+          navigate("/vendor-dashboard");
+        } else if (roleData?.role === "venue_manager") {
+          navigate("/venue-manager");
+        } else {
+          navigate("/dashboard");
+        }
+      } else {
+        navigate("/dashboard");
+      }
     } catch (error: unknown) {
       toast.error(getErrorMessage(error) || "Failed to log in");
     } finally {
